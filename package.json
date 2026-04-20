@@ -1,0 +1,12 @@
+{
+  "name": "@merlinguild/transparency",
+  "version": "0.0.0",
+  "type": "module",
+  "private": false,
+  "workspaces": ["packages/*"],
+  "trustedDependencies": [],
+  "scripts": {
+    "test": "bun run test:installer-verification",
+    "test:installer-verification": "bun run --cwd packages/installer-verification test"
+  }
+}

@@ -1,0 +1,55 @@
+name: transparency-validate
+
+on:
+  push:
+    paths:
+      - "advisories.json"
+      - "advisories.json.sig"
+      - "advisories.schema.json"
+      - "verify-advisory.ps1"
+      - "scripts/**"
+      - ".github/workflows/transparency-validate.yml"
+  pull_request:
+    paths:
+      - "advisories.json"
+      - "advisories.json.sig"
+      - "advisories.schema.json"
+      - "verify-advisory.ps1"
+      - "scripts/**"
+      - ".github/workflows/transparency-validate.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Validate advisories.json
+        run: |
+          bunx ajv-cli validate \
+            -s advisories.schema.json \
+            -d advisories.json
+
+      - name: Verify advisories.json signature
+        shell: pwsh
+        run: ./verify-advisory.ps1 -PayloadPath advisories.json
+
+      - name: Check advisories.json is append-only (on PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=2
+          prev="advisories.json"
+          if git show "origin/${{ github.base_ref }}:$prev" >/dev/null 2>&1; then
+            git show "origin/${{ github.base_ref }}:$prev" > /tmp/prev-advisories.json
+            node scripts/check-advisory-append-only.mjs /tmp/prev-advisories.json advisories.json
+          else
+            echo "No previous advisories.json, append-only check skipped."
+          fi
+        shell: bash

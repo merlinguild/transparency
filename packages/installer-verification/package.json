@@ -1,0 +1,13 @@
+{
+  "name": "@merlinguild/installer-verification",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "test:integration": "bun test src/integration/**/*.test.ts",
+    "test:unit": "bun test src/unit/**/*.test.ts"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.4.0"
+  }
+}

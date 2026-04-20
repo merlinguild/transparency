@@ -1,0 +1,84 @@
+name: transparency-mirror-check
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: transparency-mirror-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Cloudflare manifest
+        run: |
+          mkdir -p /tmp/cf
+          for f in advisories.json advisories.json.sig; do
+            curl -fsSL "https://dl.merlinguild.com/transparency/${f}" -o "/tmp/cf/${f}" || touch "/tmp/cf/${f}.missing"
+          done
+
+      - name: Download GitHub mirror manifest
+        run: |
+          mkdir -p /tmp/gh
+          for f in advisories.json advisories.json.sig; do
+            curl -fsSL "https://raw.githubusercontent.com/merlinguild/transparency/main/${f}" -o "/tmp/gh/${f}" || touch "/tmp/gh/${f}.missing"
+          done
+
+      - name: Compare byte-by-byte
+        id: compare
+        run: |
+          DIVERGENCE=""
+          for f in advisories.json advisories.json.sig; do
+            if [ -f "/tmp/cf/${f}.missing" ] || [ -f "/tmp/gh/${f}.missing" ]; then
+              DIVERGENCE="${DIVERGENCE}MISSING: ${f}\n"
+              continue
+            fi
+            if ! diff -q "/tmp/cf/${f}" "/tmp/gh/${f}" > /dev/null 2>&1; then
+              CF_SHA=$(sha256sum "/tmp/cf/${f}" | awk '{print $1}')
+              GH_SHA=$(sha256sum "/tmp/gh/${f}" | awk '{print $1}')
+              DIVERGENCE="${DIVERGENCE}DIVERGENCE: ${f} (cf=${CF_SHA} gh=${GH_SHA})\n"
+            fi
+          done
+
+          if [ -n "$DIVERGENCE" ]; then
+            echo "divergence=true" >> "$GITHUB_OUTPUT"
+            printf "Mirror parity failure detected:\n\n%s" "$DIVERGENCE" > /tmp/divergence-body.txt
+          else
+            echo "divergence=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create issue on divergence
+        if: steps.compare.outputs.divergence == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/divergence-body.txt', 'utf-8');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `SECURITY: transparency mirror parity failure: ${new Date().toISOString().slice(0,10)}`,
+              body: body + '\n\nThis is an automated alert. Investigate the release pipeline and the `transparency` repository immediately.',
+              labels: ['security', 'transparency', 'mirror-parity'],
+            });
+            core.setFailed('Mirror parity check failed, issue created');
+
+      - name: Verify Cloudflare advisory signature
+        if: steps.compare.outputs.divergence == 'false'
+        shell: pwsh
+        run: ./verify-advisory.ps1 -PayloadPath /tmp/cf/advisories.json -SigPath /tmp/cf/advisories.json.sig
+
+      - name: Verify advisory append-only
+        run: |
+          echo "[]" > /tmp/gh-fallback.json
+          curl -fsSL "https://raw.githubusercontent.com/merlinguild/transparency/main/advisories.json" -o /tmp/gh-appendcheck.json 2>/dev/null || cp /tmp/gh-fallback.json /tmp/gh-appendcheck.json
+          cp /tmp/cf/advisories.json /tmp/cf-appendcheck.json 2>/dev/null || echo "[]" > /tmp/cf-appendcheck.json
+          node scripts/check-advisory-append-only.mjs /tmp/gh-appendcheck.json /tmp/cf-appendcheck.json
