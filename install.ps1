@@ -252,6 +252,7 @@ function Receive-Msi {
       if ($status -eq 401 -or $status -eq 403) {
         throw "Worker rejected the license ($status). The JWT may be expired, revoked, or invalid."
       }
+      throw "Error: Download service returned HTTP $status for the installer. Try again later."
     }
     throw "Error: Could not reach $Script:BootstrapHost. Check your internet connection and try again."
   }
