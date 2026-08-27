@@ -14,6 +14,20 @@ Describe 'install.ps1 backup modes and license retry' {
         Remove-Item Env:MG_INSTALL_SKIP_ENTRYPOINT -ErrorAction SilentlyContinue
     }
 
+    Context 'Save-License' {
+        It 'creates the directory and writes the JWT without a UTF-8 BOM' {
+            $nested = Join-Path $script:FixtureDir ('save-' + [Guid]::NewGuid().ToString('N'))
+            $Script:LicensePath = Join-Path $nested 'license'
+
+            Save-License -Jwt 'test.jwt.value'
+
+            Test-Path $Script:LicensePath | Should -BeTrue
+            $bytes = [IO.File]::ReadAllBytes($Script:LicensePath)
+            $bytes[0] | Should -Be 116
+            [IO.File]::ReadAllText($Script:LicensePath) | Should -Be 'test.jwt.value'
+        }
+    }
+
     Context 'Invoke-BackupPathMode' {
         It 'installs the resolved local MSI path' {
             $msi = Join-Path $script:FixtureDir 'local.msi'
