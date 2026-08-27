@@ -219,9 +219,9 @@ function Get-License {
 
 function Save-License {
   param([string]$Jwt)
-  $dir = [IO.Path]::GetDirectoryName($Script:LicensePath)
+  $dir = [IO.File]::GetDirectoryName($Script:LicensePath)
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-  [IO.File]::WriteAllText($Script:LicensePath, $Jwt, [System.Text.Encoding]::UTF8)
+  [IO.File]::WriteAllText($Script:LicensePath, $Jwt, (New-Object System.Text.UTF8Encoding $false))
 }
 
 function Read-License {
