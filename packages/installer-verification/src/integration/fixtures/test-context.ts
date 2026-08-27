@@ -144,6 +144,7 @@ export const runInstaller = async (
     ...process.env,
     USERPROFILE: testDir,
     HOME: testDir,
+    LOCALAPPDATA: testDir,
     BACKUP_PATH: "",
     BACKUP_URL: "",
     ...(options.env || {}),

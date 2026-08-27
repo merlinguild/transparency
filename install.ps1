@@ -307,17 +307,36 @@ function Assert-MsiHash {
   Write-Ok "MSI SHA-256 matches manifest."
 }
 
+function Stop-RunningApp {
+  $stopped = $false
+  foreach ($name in @('merlinguild-desktop', 'merlinguild-server')) {
+    $procs = @(Get-Process -Name $name -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { continue }
+
+    Write-Info "Closing running $name ..."
+    foreach ($proc in $procs) {
+      $null = $proc.CloseMainWindow()
+      try { $proc | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue } catch {}
+    }
+    $procs | Stop-Process -Force -ErrorAction SilentlyContinue
+    $stopped = $true
+  }
+  if ($stopped) { Start-Sleep -Seconds 1 }
+}
+
 function Install-Msi {
   param([string]$MsiPath)
   if ($SkipInstall) {
     Write-Info 'Skipping MSI installation (SkipInstall flag set).'
     return
   }
+  Stop-RunningApp
   Unblock-File -Path $MsiPath -ErrorAction SilentlyContinue
   Write-Info 'Launching msiexec (expect a single UAC prompt)...'
-  $proc = Start-Process -FilePath msiexec.exe -ArgumentList @('/i', "`"$MsiPath`"", '/qb', '/norestart') -Wait -PassThru
+  $logPath = Join-Path $env:TEMP 'merlinguild-install.log'
+  $proc = Start-Process -FilePath msiexec.exe -ArgumentList @('/i', "`"$MsiPath`"", '/qb', '/norestart', '/l*v', "`"$logPath`"") -Wait -PassThru
   if ($proc.ExitCode -ne 0) {
-    throw "msiexec exited with code $($proc.ExitCode)."
+    throw "msiexec exited with code $($proc.ExitCode). Installation log: $logPath"
   }
   Write-Ok 'Installation complete.'
 }
@@ -379,7 +398,9 @@ function Invoke-MainFlow {
     $jwt = Read-License
   }
 
-  $msiPath = Join-Path $env:TEMP ('mg-' + [Guid]::NewGuid().ToString('N') + '.msi')
+  $installerDir = Join-Path $env:LOCALAPPDATA 'merlinguild\installer'
+  if (-not (Test-Path $installerDir)) { New-Item -ItemType Directory -Path $installerDir -Force | Out-Null }
+  $msiPath = Join-Path $installerDir (Split-Path -Leaf $artifact.url)
   try {
     try {
       Receive-Msi -Url $artifact.url -Jwt $jwt -OutPath $msiPath
@@ -409,7 +430,6 @@ function Invoke-MainFlow {
 
     Write-Sequence -Channel $Channel -Sequence $channelData.sequence
   } finally {
-    Remove-Item -LiteralPath $msiPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $manifest.JsonPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $manifest.SigPath -Force -ErrorAction SilentlyContinue
   }
