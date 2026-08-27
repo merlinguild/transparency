@@ -56,30 +56,11 @@ const createManifestObject = (options: ManifestOptions): Manifest => {
 
 let fixturesReady = false;
 
-const FIXTURE_NAMES = [
-  "test-manifest",
-  "test-manifest-v2",
-  "test-manifest-expired",
-  "test-manifest-tampered",
-  "test-manifest-wronghash",
-] as const;
-
-const allFixturesOnDisk = (): boolean =>
-  FIXTURE_NAMES.every((name) =>
-    existsSync(join(TMP_DIR, `${name}.json`)) &&
-    existsSync(join(TMP_DIR, `${name}.sig`))
-  ) && existsSync(join(TMP_DIR, "test-manifest-multichannel.json"));
-
 export const generateAllFixtures = async (): Promise<void> => {
   if (fixturesReady) return;
 
   if (!existsSync(TMP_DIR)) {
     mkdirSync(TMP_DIR, { recursive: true });
-  }
-
-  if (allFixturesOnDisk()) {
-    fixturesReady = true;
-    return;
   }
 
   const key = await ensureTestKey();

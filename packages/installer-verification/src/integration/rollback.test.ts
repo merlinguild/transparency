@@ -65,8 +65,33 @@ describe("rollback protection", () => {
 
     const output = result.stdout + result.stderr;
     expect(output).toContain("Rollback blocked");
-    expect(output).toContain("not greater than the stored sequence 5");
+    expect(output).toContain("lower than the stored sequence 5");
     expect(result.exitCode).toBe(1);
+  });
+
+  it("reinstall succeeds when stored sequence is equal", async () => {
+    const key = await ensureTestKey();
+    ctx.installPs1 = await createTestInstaller(ctx.testDir, key);
+    await mkdir(ctx.merlinDir, { recursive: true });
+
+    const sequencePath = join(ctx.merlinDir, ".sequence");
+    await writeFile(sequencePath, "format 1\nwindows_x64=2\n", "utf-8");
+
+    const validJwt = createTestJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    await writeFile(join(ctx.merlinDir, "license"), validJwt, "utf-8");
+
+    const result = await runInstaller(ctx.testDir, ctx.installPs1, {
+      skipInstall: true,
+      timeoutMs: 15000,
+    });
+
+    const output = result.stdout + result.stderr;
+    expect(output).not.toContain("Rollback blocked");
+    expect(output).toContain("continuing as a reinstall");
+    expect(result.exitCode).toBe(0);
+
+    const persisted = await readFile(sequencePath, "utf-8");
+    expect(persisted).toContain("windows_x64=2");
   });
 
   it("install succeeds when sequence increases and persists new sequence", async () => {

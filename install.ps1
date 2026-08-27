@@ -200,8 +200,11 @@ function Assert-NotRollback {
     throw "Rollback blocked: manifest sequence $ManifestSequence is below the embedded minimum ($Script:MinimumSequence)."
   }
   $stored = Read-Sequence -Channel $Channel
-  if ($stored -and ($ManifestSequence -le $stored)) {
-    throw "Rollback blocked: manifest sequence $ManifestSequence is not greater than the stored sequence $stored for channel '$Channel'."
+  if ($stored -and ($ManifestSequence -lt $stored)) {
+    throw "Rollback blocked: manifest sequence $ManifestSequence is lower than the stored sequence $stored for channel '$Channel'."
+  }
+  if ($stored -and ($ManifestSequence -eq $stored)) {
+    Write-Info "Sequence $stored is already recorded; continuing as a reinstall."
   }
 }
 
